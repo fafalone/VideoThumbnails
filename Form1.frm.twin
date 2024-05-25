@@ -1,0 +1,196 @@
+[FormDesignerId("231FAFAA-E7A2-400E-8A25-1CC55F885E7A")]
+[ClassId("18E8756B-ED81-4D11-BB3A-344A8E8FBA4B")]
+[InterfaceId("628A7A83-4BEF-49B3-93BF-8C4CBAF65AF9")]
+[EventInterfaceId("E7654A71-41AB-4112-930D-C78AEF5BD5E3")]
+Class Form1
+    Attribute VB_Name = "Form1"
+    Attribute VB_GlobalNameSpace = False
+    Attribute VB_Creatable = False
+    Attribute VB_PredeclaredId = True
+    Attribute VB_Exposed = False
+    ' Autor: F. Schüler (frank@activevb.de)
+    ' Datum: 12/2020
+    'Updates for WinDevLib/x64 compatibility and 
+    'additional features by Jon Johnson, 05/2024
+    
+    Option Explicit
+    
+    Private MaxThumbnailWidth As Long
+    
+    Private strJpgFile As String
+    Private strVideoFile As String
+    Private curDuration As LongLong
+    
+    Private cVideoThumbnail As clsVideoThumbnail
+    
+    Private Sub Form_Load()
+        MaxThumbnailWidth = 256
+        Dim strDuration As String
+        
+        strJpgFile = App.Path & "\test-" & Format$(Now, "yyyymmdd-HhnnSs") & ".jpg"
+        strVideoFile = App.Path & "\file_example_MP4_1280_10MG.mp4"
+        
+        Set cVideoThumbnail = New clsVideoThumbnail
+        
+        ' Scollbar Parameter und deaktivieren
+        With hscPos
+            .Max = 100
+            .Min = 0
+            .Enabled = False
+        End With
+        
+        ' Button deaktivieren
+        cmdSaveAsJpg.Enabled = False
+        
+        ' Video zuweisen
+        ' (alle von der Media Foundation unterstüten Videoformate)
+        cVideoThumbnail.SetVideoFile = strVideoFile
+        
+        ' Video geladen und vorbereitet?
+        If cVideoThumbnail.IsVideoLoaded = True Then
+        
+            ' Spielzeit des Videos ermitteln
+            curDuration = cVideoThumbnail.GetVideoDuration
+        
+            ' Thumbnail vom Video erstellen.
+            ' Wenn MaxWidth = 0 oder nicht angegeben, wird die volle
+            ' Breite und Höhe des Videos verwendet
+            Me.Picture = cVideoThumbnail.GetVideoThumbnail(CalcDispWidth())
+            
+            ' ist ein Handle vorhanden
+            If Me.Picture.Handle <> 0& Then
+            
+                ' Button aktivieren
+                cmdSaveAsJpg.Enabled = True
+            
+            End If
+            
+            ' kann eine neue Position im Video gesetzt werden?
+            If cVideoThumbnail.IsVideoSeekable = True Then
+            
+                ' ist eine Spielzeit vorhanden
+                If curDuration > 0 Then
+                
+                    ' Laufzeit speichern
+                    strDuration = cVideoThumbnail.Time2String(curDuration)
+                    
+                    ' Anzeige im Label
+                    lblPos.Caption = "Position: " & cVideoThumbnail.Time2String(0) & _
+                        " of " & cVideoThumbnail.Time2String(curDuration)
+                    
+                    ' Scollbar aktivieren
+                    hscPos.Enabled = True
+                
+                End If
+            Else
+                Debug.Print "NON_SEEKABLE"
+            End If
+        
+            ' Dimensionen des Videos anzeigen
+            Me.Caption = "Original: " & CStr(cVideoThumbnail.GetVideoWidth) & " x " & _
+                CStr(cVideoThumbnail.GetVideoHeight) & " Pixel / Display: " & _
+                CStr(CLng(Me.ScaleX(Me.Picture.Width, vbHimetric, vbPixels))) & " x " & _
+                CStr(CLng(Me.ScaleY(Me.Picture.Height, vbHimetric, vbPixels))) & _
+                " Pixel / Duration: " & strDuration
+        
+        End If
+        
+    End Sub
+    
+    Private Function CalcDispWidth() As Long
+        'Display width is:
+        '-The full video, if both width and height fit
+        '-The form width, if the width is larger than the height
+        '-The largest width that will fit the max height
+        Dim cx As Long = cVideoThumbnail.GetVideoWidth
+        Dim cy As Long = cVideoThumbnail.GetVideoHeight
+        
+        Dim cxMax As Long = Me.ScaleWidth - 10
+        Dim cyMax As Long = Me.ScaleHeight - (Me.ScaleHeight - Label1.Top) - 10
+        
+        'Debug.Print "CalcDispWidth() cx=" & cx ", cy=" & cy & ", cxMax=" & cxMax & ", cyMax=" & cyMax
+        
+        If (cx <= cxMax) And (cy <= cyMax) Then Return cx
+        
+        If cy <= cyMax Then
+            'Debug.Print "CalcDispWidth() Returning cxMax"
+            Return cxMax
+        Else
+            Dim ar As Single
+            ar = cx / cy
+            If cy <= cx Then
+                Return Round(cyMax * ar, 0)
+            Else
+                Return Round(cxMax * ar, 0)
+            End If
+         End If
+  
+    End Function
+    
+    Private Sub hscPos_Scroll()
+    
+        Call hscPos_Change
+        
+    End Sub
+    
+    Private Sub hscPos_Change()
+        
+        Dim curPos As LongLong
+        
+        ' Position berechnen
+        curPos = (curDuration * hscPos.Value) / hscPos.Max
+        
+        ' Anzeige im Label
+        lblPos.Caption = "Postion: " & cVideoThumbnail.Time2String(curPos) & _
+            " of " & cVideoThumbnail.Time2String(curDuration)
+        
+        ' neue Position im Video setzen
+        cVideoThumbnail.SetVideoPos = curPos
+        
+        ' Thumbnail vom Video erstellen
+        Me.Picture = cVideoThumbnail.GetVideoThumbnail(CalcDispWidth())
+    
+    End Sub
+    
+    Private Sub cmdSaveAsJpg_Click()
+    
+        Dim strInf As String
+        Dim oPicture As StdPicture
+    
+        If ckFullSize.Value = vbChecked Then
+        
+            Set oPicture = cVideoThumbnail.GetVideoThumbnail
+        
+            strInf = "The image from the video was saved in full size as a JPG."
+        
+        Else
+    
+            Set oPicture = cVideoThumbnail.GetVideoThumbnail(MaxThumbnailWidth)
+            
+            strInf = "The thumbnail from the video was saved as a JPG."
+        
+        End If
+        
+        ' speichert das Thumbnail vom Video als JPG
+        If cVideoThumbnail.SaveVideoThumbnailAsJPG(oPicture.Handle, strJpgFile) = True Then
+    
+            MsgBox strInf, vbOKOnly Or vbInformation, "VideoThumbnail"
+    
+        End If
+    
+        Set oPicture = Nothing
+    
+    End Sub
+    
+    Private Sub Form_Unload(Cancel As Integer)
+    
+        Set cVideoThumbnail = Nothing
+        
+    End Sub
+    
+    Private Sub Text1_Change() Handles Text1.Change
+        MaxThumbnailWidth = CLng(Text1.Text)
+    End Sub
+    
+
+End Class
